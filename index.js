@@ -1,22 +1,17 @@
-'use strict';
-
 const markerBegin = '<x:xmpmeta';
 const markerEnd = '</x:xmpmeta>';
 
 const bufferLimit = 65536;
 
 const knownTags = [
-	'MicrosoftPhoto:LastKeywordXMP',
-	'MicrosoftPhoto:LastKeywordIPTC',
-	'MicrosoftPhoto:Rating',
-	'Iptc4xmpCore:Location',
-	'xmp:Rating',
-	'dc:title',
-	'dc:description',
-	'dc:creator',
-	'dc:rights',
-	'cc:attributionName'
+	'dc:subject', //aka "Keywords"
+    'RDF:rdf',
+    'RDF:Description'
 ];
+knownTags.includes = includes;
+
+const knownAttributes = [];
+knownAttributes.includes = includes;
 
 const envelopeTags = [
 	'rdf:Bag',
@@ -25,92 +20,105 @@ const envelopeTags = [
 	'rdf:li'
 ];
 
-let fs = require('fs');
+function includes (value) {
+    for(entry of this){ 
+        if(value===entry) {
+            return true;
+        }
+    }
+    return false;
+};
 
-let bufferToPromise = (buffer) => new Promise((resolve, reject) => {
-	if (!Buffer.isBuffer(buffer)) reject('Not a Buffer');
-	else {
-		let data = {raw: {}};
-		let offsetBegin = buffer.indexOf(markerBegin);
-		if (offsetBegin) {
-			let offsetEnd = buffer.indexOf(markerEnd);
-			if (offsetEnd) {
-				let xmlBuffer = buffer.slice(offsetBegin, offsetEnd + markerEnd.length);
-				let parser = require('sax').parser(true);
-				let nodeName;
 
-				parser.onerror = (err) => reject(err);
-				parser.onend = () => resolve(data);
+let bufferToPromise = (buffer, tags) => new Promise((resolve, reject) => {
 
-				parser.onopentag = function (node) {
-					if (knownTags.indexOf(node.name) != -1) nodeName = node.name;
-					else if (envelopeTags.indexOf(node.name) == -1) nodeName = null;
-				};
+    try{
+    
+        //set Metadata tags to read from buffer
+        var newTags = tags || {};
+        if(typeof newTags.ns != "undefined" && typeof newTags.tags != "undefined") {
+            var tagKeys = Object.keys(newTags.tags);
+            var attrKeys = Object.keys(newTags.attributes);
 
-				parser.ontext = function(text) {
-					if (text.trim() != '') switch (nodeName) {
-						case 'MicrosoftPhoto:LastKeywordXMP':
-						case 'MicrosoftPhoto:LastKeywordIPTC':
-							if (!data.raw[nodeName]) data.raw[nodeName] = [text];
-							else if (data.raw[nodeName].indexOf(text) == -1) data.raw[nodeName].push(text);
-							if (!data.keywords) data.keywords = [text];
-							else if (data.keywords.indexOf(text) == -1) data.keywords.push(text);
-							break;
-						case 'dc:title':
-							data.raw[nodeName] = text;
-							data.title = text;
-							break;
-						case 'dc:description':
-							data.raw[nodeName] = text;
-							data.description = text;
-							break;
-						case 'xmp:Rating':
-							data.raw[nodeName] = text;
-							data.rating = parseInt(text);
-							break;
-						case 'MicrosoftPhoto:Rating':
-							data.raw[nodeName] = text;
-							data.rating = Math.floor(parseInt(text) + 12 / 25) + 1;
-							break;
-						case 'Iptc4xmpCore:Location':
-							data.raw[nodeName] = text;
-							data.location = text;
-							break;
-						case 'dc:creator':
-							data.raw[nodeName] = text;
-							data.creator = text;
-							break;
-						case 'cc:attributionName':
-							data.raw[nodeName] = text;
-							data.attribution = text;
-							break;
-						case 'xmpRights:UsageTerms':
-						case 'dc:rights':
-							data.raw[nodeName] = text;
-							data.terms = text;
-							break;
-					}
-				};
+            //add tag name to knownTags
+            for(key of tagKeys) {
+                if(!knownTags.includes(newTags.ns+":"+key)){
+                    knownTags.push(newTags.ns+":"+key);
+                }
+            }
+            //add attribute name to knownAttributes
+            for(key of attrKeys) {
+                if(!knownAttributes.includes(newTags.ns+":"+key)){
+                    knownAttributes.push(newTags.ns+":"+key);
+                }
+            }
+            
+        }
 
-				parser.write(xmlBuffer.toString('utf-8', 0, xmlBuffer.length)).close();
-			}
-			else resolve(data);
-		}
-		else resolve(data);
-	}
-});
+        if (!Buffer.isBuffer(buffer)) 
+            { reject('Not a Buffer'); }
+        else {    
+            let data = {raw: {}};
+            let offsetBegin = buffer.indexOf(markerBegin);
+            let offsetEnd = buffer.indexOf(markerEnd);
+            if (offsetBegin && offsetEnd) {
 
-let fileToBuffer = (file) => new Promise((resolve, reject) => {
-	fs.open(file, 'r', (err, fd) => {
-		if (err) reject(err);
-		else {
-			let buffer = new Buffer(bufferLimit);
-			fs.read(fd, buffer, 0, bufferLimit, 0, (err, bytesRead, buffer) => {
-				if (err) reject(err);
-				else resolve(buffer);
-			});
-		}
-	});
+                const parser = require("sax").parser(true);
+                let xmlBuffer = buffer.slice(offsetBegin, offsetEnd + markerEnd.length);
+                let nodeName;
+                data.raw = xmlBuffer.toString('utf-8', 0, xmlBuffer.length);
+                let tmp = "";
+
+                parser.onerror = (err) => reject(err);
+                parser.onend = () => { console.log(tmp); resolve(data); }
+
+                parser.onopentag = function (node) {
+                    if (knownTags.indexOf(node.name) != -1) {
+                        nodeName = node.name; 
+                    }
+                    else if (envelopeTags.indexOf(node.name) == -1) {
+                        nodeName = null;
+                    }
+                };
+                
+                parser.onattribute = function (attr) {
+                
+                    if (knownAttributes.indexOf(attr.name) != -1) {
+                        var attrName = attr.name.slice(newTags.ns.length+1);
+                        data[attrName] = parseInt(attr.value);
+                    }
+                }
+
+                parser.ontext = function(text) {
+                
+                    if (text.trim() != '') {
+                    
+                        switch(nodeName) {
+                            case 'dc:subject':
+                                data.raw[nodeName] = text;
+                                let textParts = text.split(':', 2);
+                                if(textParts.length = 2)
+                                    data[textParts[0]] = Number(textParts[1]);
+                                tmp += text+"; ";
+                                break;  
+                            default:
+                                data.raw[nodeName] = text;
+                                data[nodeName] = parseInt(text);
+                                break;
+                        }
+
+                    }
+                };
+
+                parser.write(xmlBuffer.toString('utf-8', 0, xmlBuffer.length)).close();
+            }
+            else {
+                reject("Did not find: '<x:xmpmeta' and '</x:xmpmeta>' Invalid XMP");
+            }
+        }
+        
+    }catch (e) { reject("other error: "+ e.message);}
+    
 });
 
 let promiseToCallback = (promise, callback) => {
@@ -121,5 +129,4 @@ let promiseToCallback = (promise, callback) => {
 	return promise;
 };
 
-module.exports.fromBuffer = (buffer, callback) => promiseToCallback(bufferToPromise(buffer), callback);
-module.exports.fromFile = (filename, callback) => promiseToCallback(fileToBuffer(filename).then(bufferToPromise), callback);
+module.exports = (buffer, tags, callback) => promiseToCallback(bufferToPromise(buffer, tags), callback);
