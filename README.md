@@ -1,31 +1,33 @@
-# xmp-reader  [![NPM version](https://badge.fury.io/js/xmp-reader.svg)](http://badge.fury.io/js/xmp-reader) [![Build Status](https://travis-ci.org/shkuznetsov/xmp-reader.svg?branch=master)](https://travis-ci.org/shkuznetsov/xmp-reader)
-Extracts some commonly used XMP/RDF metadata tags from JPEG files.
-Does not pretend to be a complete metadata management tool, but allows you to extract some information other EXIF-management tools on NPM fail to retrieve.
-Was originally created only to extract a Description field baked into my JPEGs by Google's Picasa.
+# xmp-reader  
+Extracts custom defined XMP/RDF metadata tags from image files.
+
+### new API: 
+```AsciiDoc
+xmp-reader (*NodeBuffer* buffer, *object* nsTagAndAttributeNames) : *object* tagAndAttributeProps
+```
+
+ - where the buffer is a file (like png) that has has xmp embedded. And the tagAndAttributeNames has the three properties: *string* ns, *object* tags, *object* attributes
+
+### Issue: 
+If the xmp is wrongly formatted (ie. tag-names in sequence is not put inside proper envelopTag, 
+the tags are parsed as attributes instead...)
 
 ## Usage
+To install the module add it to your project's package.json dependencies or install manually running:
 
-To install the module add it to your project's ``package.json`` dependencies or install manually running:
 ```
 npm install xmp-reader
 ```
 
 Then pull it in your code:
+
 ```javascript
 const xmpReader = require('xmp-reader');
 ```
 
-Now you can either feed it a file name:
+You can either feed it a buffer:
 ```javascript
-xmpReader.fromFile('/path/to/file.jpg', (err, data) => {
-  if (err) console.log(err);
-  else console.log(data);
-});
-```
-
-Or a buffer:
-```javascript
-xmpReader.fromBuffer(buffer, (err, data) => {
+xmpReader.fromBuffer(buffer, tags, (err, data) => {
   if (err) console.log(err);
   else console.log(data);
 });
@@ -42,25 +44,15 @@ xmpReader.fromBuffer(buffer).then(
 Output will look something like that, depending on your metadata:
 ```javascript
 {
-	"raw": {
-		"MicrosoftPhoto:Rating": "50",
-		"dc:title": "Title",
-		"dc:description": "Title",
-		"dc:creator": "Alexander Kuznetsov",
-		"Iptc4xmpCore:Location": "New York",
-		"MicrosoftPhoto:LastKeywordXMP": ["tag1", "tag2"],
-		"MicrosoftPhoto:LastKeywordIPTC": ["tag1", "tag2"],
-		"xmp:Rating": "3"
-	},
-	"rating": 3,
-	"title": "Title",
-	"description": "Title",
-	"creator": "Alexander Kuznetsov",
-	"location": "New York",
-	"keywords": ["tag1", "tag2"]
+	"customTag1": "value",
+	"customTag2": "value0",
+	"keyword1": "value1",
+	"keyword2": "value2",
+	"raw": "<xmp...",
 }
 ```
-``raw`` property contains vendor-specific tag names.
 
 ## License
 [MIT License](http://en.wikipedia.org/wiki/MIT_License)
+
+This module was derived from [xmp-reader](https://github.com/shkuznetsov/xmp-reader).
