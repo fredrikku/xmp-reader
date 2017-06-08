@@ -1,4 +1,4 @@
-# xmp-reader  
+# Custom XMP-reader module  
 Extracts custom defined XMP/RDF metadata tags from image files.
 
 ### new API: 
